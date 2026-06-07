@@ -1,59 +1,113 @@
 function [next] = rocketmotion(current, dt)
 
-    % Constants
-    g0 = 9.8; % Standard gravity (m/s^2)
-    R = 287.05; % Specific gas constant for dry air (J/(kg·K))
-    T0 = 288.15; % Standard temperature at sea level (K)
-    L = 0.0065; % Temperature lapse rate (K/m)
-    rho0 = 1; % Sea level air density (kg/m^3)
-    Isp = 453; % Specific impulse (in seconds)
-    u = Isp * g0; % Effective exhaust velocity
+    % ── Constants ────────────────────────────────────────
+    g0    = 9.8;        % Standard gravity at sea level (m/s^2)
+    R_air = 287.05;     % Specific gas constant for dry air (J/kg·K)
+    T0    = 288.15;     % Sea level temperature (K)
+    L     = 0.0065;     % Temperature lapse rate (K/m)
+    rho0  = 1.225;      % Sea level air density (kg/m^3)
+    R_e   = 6371000;    % Earth radius (m)
+    lat   = 28.5;       % Launch latitude in degrees (e.g. Kennedy Space Center)
+    omega = 7.2921e-5;  % Earth angular velocity (rad/s)
 
-    % Air density (varying with altitude)
-    h = current.h; % Current altitude (meters)
-    T = T0 - L * h; % Temperature at altitude h
-    rho = rho0 * (T / T0).^(g0 / (R * L)); % Density at altitude h
+    % ── Unpack config from state ─────────────────────────
+    h           = current.h;
+    v           = current.v;
+    vx          = current.vx;
+    m           = current.m;
+    dry_m       = current.dry_m;
+    Isp         = current.Isp;
+    Cd          = current.Cd;
+    A           = current.A;
+    thrust_max  = current.thrust_max;
+    angle_deg   = current.angle;
+    stage2_t    = current.stage2_start;
+    stage1_m    = current.stage1_mass;
+    staged      = current.staged;
 
-    % Other parameters (unchanged from original code)
-    A = 1.0;
-    weight = current.m * g0; % Gravity acts downward
+    angle_rad   = angle_deg * pi / 180;
 
-    % Variable thrust (adjust as needed)
-    max_mass_flow_rate = 100;
-    max_velocity = 1000; % Maximum velocity at which throttle is at max
+    % ── Atmosphere ───────────────────────────────────────
+    T   = max(T0 - L * h, 216.65);              % Temperature at altitude (K), floor at stratosphere
+    rho = rho0 * (T / T0)^(g0 / (R_air * L));  % Air density at altitude
+    a   = sqrt(1.4 * R_air * T);                % Speed of sound (m/s)
 
-    % Decrease throttle linearly with velocity
-    throttle = max(0, 1 - current.v / (max_velocity + 0.01)); % Added a small constant to prevent throttle from becoming zero
+    % ── Variable gravity ─────────────────────────────────
+    g = g0 * (R_e / (R_e + h))^2;
 
-    mass_flow_rate = max(0, max_mass_flow_rate * throttle);
+    % ── Staging ──────────────────────────────────────────
+    if ~staged && current.t >= stage2_t
+        m      = m - stage1_m;   % Drop first stage hardware
+        staged = true;
+        fprintf('** Stage separation at t=%.1fs | New mass: %.0f kg **\n', current.t, m);
+    end
 
-    % Calculate thrust with a decrease with altitude
-    thrust = mass_flow_rate * Isp * g0;
+    % ── Thrust (zero if out of fuel) ─────────────────────
+    fuel_remaining = m - dry_m;
+    u              = Isp * g0;                            % Exhaust velocity
+    max_flow       = thrust_max / u;                      % Max mass flow rate (kg/s)
 
-    % Update state
-    next = current;
-    next.t = current.t + dt;
-    next.m = current.m - mass_flow_rate * dt;
+    % Throttle decreases as velocity increases (same logic as original)
+    max_v_throttle = 1000;
+    throttle       = max(0, 1 - v / (max_v_throttle + 0.01));
+    mass_flow      = max_flow * throttle;
 
-    % Calculate drag after updating velocity
-    drag = 0.5 * rho * A * next.v.^2;
+    if fuel_remaining <= 0
+        mass_flow = 0;   % No fuel, no thrust
+        m         = dry_m;
+    end
 
-    % Calculate Coriolis force (example, you may need to adjust based on your scenario)
-    omega = 7.2921159e-5; % Earth's angular speed (rad/s)
-    F_coriolis = 2 * current.v * omega * sin(current.h);
+    thrust = mass_flow * u;
 
-    % Sum of forces (considering thrust, drag, and Coriolis force)
-    sumF = weight - thrust - drag - F_coriolis; % Subtract thrust because it acts in the opposite direction of weight
+    % ── Drag ─────────────────────────────────────────────
+    speed      = sqrt(v^2 + vx^2);                  % Total speed
+    drag_total = 0.5 * rho * Cd * A * speed^2;      % Total drag force
+    drag_v     = drag_total * (v  / (speed + 1e-9)); % Vertical component
+    drag_x     = drag_total * (vx / (speed + 1e-9)); % Horizontal component
 
-    % Acceleration
-    next.acc = (sumF / current.m);
+    % ── Coriolis force (corrected: uses latitude, not altitude) ──
+    F_coriolis = 2 * m * v * omega * sin(lat * pi / 180);
 
-    % Calculate new velocity and height
-    next.v = (current.v + next.acc * dt);
-    next.h = current.h + (current.v + next.v) / 2 * dt; % Use the average velocity to calculate the new height
-    % Calculate the change in gravity
-    next.g = g0 - (0.00029 * next.h);
+    % ── Forces ───────────────────────────────────────────
+    thrust_v = thrust * sin(angle_rad);   % Vertical thrust component
+    thrust_x = thrust * cos(angle_rad);   % Horizontal thrust component
 
-    % Store the calculated thrust in the next structure
-    next.T = thrust;
+    weight   = m * g;
+
+    sum_Fv = thrust_v - weight - drag_v - F_coriolis;
+    sum_Fx = thrust_x - drag_x;
+
+    % ── Integrate ────────────────────────────────────────
+    acc_v = sum_Fv / m;
+    acc_x = sum_Fx / m;
+
+    next_v  = v  + acc_v * dt;
+    next_vx = vx + acc_x * dt;
+
+    next_h = h + (v + next_v) / 2 * dt;
+    next_x = current.x + (vx + next_vx) / 2 * dt;
+
+    % Floor at ground
+    if next_h < 0
+        next_h  = 0;
+        next_v  = 0;
+        next_vx = 0;
+    end
+
+    % ── Mach number ──────────────────────────────────────
+    mach = speed / a;
+
+    % ── Pack next state ──────────────────────────────────
+    next             = current;
+    next.t           = current.t + dt;
+    next.h           = next_h;
+    next.x           = next_x;
+    next.v           = next_v;
+    next.vx          = next_vx;
+    next.m           = m - mass_flow * dt;
+    next.g           = g;
+    next.mach        = mach;
+    next.staged      = staged;
+    next.T           = thrust;
+
 end
