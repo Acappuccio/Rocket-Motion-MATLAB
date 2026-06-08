@@ -1,95 +1,103 @@
-# Rocket Motion Simulation — MATLAB/Octave
+# Rocket Motion Simulation — MATLAB
 
-A physics-based numerical simulation of rocket flight, modeling velocity, altitude, mass, and trajectory over time. Built in MATLAB/Octave using differential equations and real atmospheric models.
+A physics-based numerical simulation of two-stage rocket flight combined with 
+engineering analysis of rocket fuel tank design. Built in MATLAB using 
+differential equations, real atmospheric models, and numerical integration.
 
 ---
 
 ## What It Does
 
-This simulation models a rocket launching from the ground and tracks its behavior every 0.5 seconds, accounting for:
+Two separate but related analyses:
 
-- **Thrust** — engine force based on specific impulse (Isp) and fuel burn rate
-- **Drag** — air resistance that varies with altitude and speed
-- **Variable gravity** — gravity weakens as the rocket climbs
-- **Atmospheric density** — air gets thinner at higher altitudes, reducing drag
-- **Staging** — first stage hardware drops at a set time, reducing mass
-- **Mach number** — tracks when the rocket goes supersonic
-- **2D trajectory** — models both vertical and horizontal motion based on launch angle
-- **Coriolis force** — accounts for Earth's rotation
+**1. Flight Simulation** — models a rocket launching from the ground and tracks 
+its behavior every 0.5 seconds accounting for thrust, drag, variable gravity, 
+atmospheric density, staging, Mach number, and 2D trajectory.
+
+**2. Fuel Tank Analysis** — models a conical liquid hydrogen fuel tank, computing 
+volume via numerical integration and work required to pump fuel out using 
+real fluid dynamics parameters.
 
 ---
 
-## Simulation Output
+## Flight Simulation Output
 
-Running `demo_rocket` produces:
+Running demo_rocket produces:
+- 5 plots: vertical velocity, altitude, mass, Mach number, and 2D trajectory
+- Flight summary printed to command window
 
-- **5 plots:** Vertical velocity, altitude, mass, Mach number, and 2D trajectory
-- **Flight summary** printed to the command window:
-  - Max altitude and time reached
-  - Max velocity
-  - Max Mach number
-  - Whether and when the rocket went supersonic
-  - Total downrange distance
-  - Burnout mass
+Flight results:
+- Max Altitude: 21,979.63 m (21.98 km)
+- Max Velocity: 385.93 m/s
+- Max Mach: 1.377 — went supersonic at t=86.5s
+- Stage separation at t=40.0s
+- Burnout Mass: 28,739.14 kg
+- Horizontal Distance: 7,921.56 m (7.92 km)
+
+---
+
+## Fuel Tank Analysis Output
+
+Running rocket_fuel_tank produces:
+- 3D visualization of conical tank with lighting and grid
+- Volume of liquid hydrogen tank
+- Work required to pump fuel out
+
+Tank results:
+- Volume: 41.89 m³
+- Work to pump: 218,352.78 J
+- Fluid: Liquid hydrogen (ρ = 70.85 kg/m³)
 
 ---
 
 ## How to Run
 
-1. Open MATLAB (R2019b+) or GNU Octave (6+)
-2. Navigate to the project folder
-3. Run in the command window:
-```
+Flight simulation:
 demo_rocket
-```
+
+Fuel tank analysis:
+rocket_fuel_tank
 
 ---
 
-## Adjustable Parameters
-
-All key parameters are at the top of `demo_rocket.m` — no need to touch the physics code:
+## Adjustable Parameters — Flight Simulation
 
 | Parameter | Default | Description |
 |---|---|---|
-| `dry_mass` | 5000 kg | Rocket body mass without fuel |
-| `fuel_mass` | 45000 kg | Starting fuel mass |
-| `thrust_max` | 600000 N | Maximum engine thrust |
-| `Isp` | 453 s | Specific impulse (engine efficiency) |
-| `drag_coeff` | 0.5 | Drag coefficient |
-| `rocket_area` | 1.0 m² | Cross-sectional area |
-| `launch_angle` | 85° | Launch angle from horizontal (90° = straight up) |
-| `stage2_start` | 40 s | Time of first stage separation |
-| `dt` | 0.5 s | Time step (smaller = more accurate) |
-| `total_time` | 120 s | Total simulation duration |
+| dry_mass | 5000 kg | Rocket body mass without fuel |
+| fuel_mass | 45000 kg | Starting fuel mass |
+| thrust_max | 600000 N | Maximum engine thrust |
+| Isp | 453 s | Specific impulse |
+| drag_coeff | 0.5 | Drag coefficient |
+| launch_angle | 85° | Launch angle from horizontal |
+| stage2_start | 40 s | Time of first stage separation |
+| dt | 0.5 s | Time step |
+| total_time | 120 s | Total simulation duration |
+
+---
+
+## Adjustable Parameters — Fuel Tank
+
+| Parameter | Default | Description |
+|---|---|---|
+| rho | 70.85 kg/m³ | Liquid hydrogen density |
+| R | 2 m | Base radius of cone |
+| y_end | 10 m | Height of cone |
 
 ---
 
 ## File Structure
 
-```
-├── demo_rocket.m          # Main entry point — run this
-├── rocketmotion.m         # Core physics engine (forces, integration)
-├── rocketthrust.m         # Thrust force model
-├── demo_rocketthrust.m    # Standalone thrust demo
-├── plot_rockettraj.m      # Trajectory plotting helper
-├── tests_rocketmotion.m   # Automated tests for physics functions
-```
-
----
-
-## Physics Overview
-
-At each time step, `rocketmotion.m` computes the net force on the rocket:
-
-```
-Net Force = Thrust - Weight - Drag - Coriolis
-```
-
-Then integrates using the trapezoidal method to update velocity and position. Atmospheric density follows the International Standard Atmosphere (ISA) model.
+| File | Description |
+|---|---|
+| demo_rocket.m | Main flight simulation entry point |
+| rocketmotion.m | Core physics engine |
+| rocketthrust.m | Thrust force model |
+| rocket_fuel_tank.m | Conical tank volume and work analysis |
+| plot_rockettraj.m | Trajectory plotting helper |
+| tests_rocketmotion.m | Automated tests for physics functions |
 
 ---
 
 ## Requirements
-
-- MATLAB R2019b or later, **or** GNU Octave 6+
-- No additional toolboxes required
+MATLAB R2019b or later. No additional toolboxes required.
